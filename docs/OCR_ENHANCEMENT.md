@@ -1,144 +1,156 @@
 # OCR Enhancement for PDF Processing
 
-This document describes the OCR (Optical Character Recognition) enhancement added to the RAG API for processing scanned PDF documents.
+This document describes the OCR (Optical Character Recognition) enhancement added to the RAG API for processing PDF documents using Mistral OCR API.
 
 ## Overview
 
-The OCR enhancement enables the RAG API to extract text from scanned PDF documents that contain images of text rather than selectable text. This is accomplished using the `rapidocr-onnxruntime` library, which is already included in the project dependencies.
+The OCR enhancement enables the RAG API to extract text from ALL PDF documents using Mistral's state-of-the-art OCR service. This ensures consistent text extraction from both regular and scanned PDF documents.
 
 ## Key Features
 
-- **Automatic Fallback**: When regular PDF text extraction yields insufficient content, the system automatically attempts OCR
-- **Configurable Threshold**: You can set the minimum amount of text required before OCR fallback is triggered
-- **Non-Breaking**: Existing functionality for text-based PDFs remains unchanged
-- **Configurable**: OCR can be enabled/disabled via environment variables
+- **Universal OCR Processing**: ALL PDFs are processed through Mistral OCR API
+- **High Accuracy**: Leverages Mistral's advanced OCR model (`mistral-ocr-latest`)
+- **Cloud-Based**: Uses Mistral's cloud OCR service for optimal performance
+- **Automatic Cleanup**: Uploaded files are automatically cleaned up after processing
+- **Comprehensive Metadata**: Preserves detailed processing information
 
 ## How It Works
 
-1. **Regular PDF Processing**: First, the system attempts normal text extraction using PyPDFLoader
-2. **Content Evaluation**: If the extracted text is below the configured threshold, OCR processing is triggered
-3. **OCR Processing**: The PDF is processed using the unstructured library to extract images, then OCR is applied
-4. **Text Combination**: OCR results are intelligently combined to maintain reading order
+1. **File Upload**: PDF is uploaded to Mistral for OCR processing
+2. **Signed URL Generation**: Mistral provides a secure URL for processing
+3. **OCR Processing**: Text is extracted using `mistral-ocr-latest` model
+4. **Text Retrieval**: Extracted text is retrieved from the response
+5. **Cleanup**: Uploaded files are automatically deleted from Mistral
 
 ## Configuration
 
 ### Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PDF_USE_OCR_FALLBACK` | `True` | Enable/disable OCR fallback when text extraction is insufficient |
-| `PDF_OCR_MIN_TEXT_THRESHOLD` | `50` | Minimum characters needed to consider text extraction successful |
-| `PDF_EXTRACT_IMAGES` | `False` | Whether to extract images during PDF processing |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `MISTRAL_API_KEY` | **Yes** | API key for Mistral OCR service |
 
 ### Example Configuration
 
 ```bash
-# Enable OCR fallback (default)
-PDF_USE_OCR_FALLBACK=True
-
-# Set threshold to 100 characters
-PDF_OCR_MIN_TEXT_THRESHOLD=100
-
-# Enable image extraction
-PDF_EXTRACT_IMAGES=True
+# Required: Mistral API key for OCR processing
+MISTRAL_API_KEY=your-mistral-api-key-here
 ```
 
 ## Usage
 
-The OCR enhancement is automatically integrated into the existing document loading pipeline. No code changes are required to use it:
+The OCR enhancement is automatically integrated into the existing document loading pipeline. All PDFs are processed through OCR:
 
 ```python
-# This will automatically use OCR for scanned PDFs
+# This will automatically use Mistral OCR for ALL PDFs
 from app.utils.document_loader import get_loader
 
-loader, known_type, file_ext = get_loader("scanned_document.pdf", "application/pdf", "path/to/file.pdf")
+loader, known_type, file_ext = get_loader("document.pdf", "application/pdf", "path/to/file.pdf")
 documents = loader.load()
 ```
 
 ## API Endpoints
 
-All existing PDF processing endpoints automatically benefit from OCR enhancement:
+All existing PDF processing endpoints automatically use Mistral OCR:
 
 - `POST /embed` - Upload and embed PDF documents
-- `POST /local/embed` - Embed local PDF files
+- `POST /local/embed` - Embed local PDF files  
 - `POST /embed-upload` - Upload PDF files for embedding
 
 ## Implementation Details
 
-### OCREnabledPDFLoader Class
+### MistralOCRPDFLoader Class
 
-The enhancement is implemented through the `OCREnabledPDFLoader` class in `app/utils/ocr_pdf_loader.py`. This class:
+The enhancement is implemented through the `MistralOCRPDFLoader` class in `app/utils/ocr_pdf_loader.py`. This class:
 
-- Extends the existing PDF loading functionality
-- Uses PyPDFLoader for regular text extraction
-- Falls back to OCR when text content is insufficient
-- Combines OCR results intelligently to maintain reading order
+- Processes ALL PDFs through Mistral OCR API
+- Handles file upload and signed URL generation
+- Extracts text from OCR responses
 - Preserves metadata and source information
+- Automatically cleans up uploaded files
 
 ### Dependencies
 
-- `rapidocr-onnxruntime`: OCR processing engine
-- `unstructured`: Advanced PDF processing and image extraction
-- `opencv-python-headless`: Image processing for OCR
+- `mistralai`: Official Mistral AI Python client
 - `langchain-community`: Document loading framework
 
 ## Performance Considerations
 
-- **Regular PDFs**: No performance impact (uses standard PyPDFLoader)
-- **Scanned PDFs**: OCR processing adds processing time but enables text extraction from previously inaccessible documents
-- **Memory Usage**: OCR processing requires additional memory for image processing
-- **Caching**: Consider implementing caching for frequently processed documents
+- **Cloud Processing**: OCR is handled by Mistral's cloud infrastructure
+- **API Calls**: Each PDF requires upload and processing API calls
+- **Network Dependency**: Requires internet connectivity to Mistral's API
+- **Processing Time**: OCR processing time depends on document size and complexity
 
 ## Error Handling
 
 The system gracefully handles OCR failures:
 
-1. If OCR initialization fails, the system falls back to regular PDF processing
-2. If OCR processing fails, the original PDF extraction results are returned
-3. Detailed logging helps with troubleshooting OCR issues
+1. If API key is missing, loader initialization fails with clear error message
+2. If OCR processing fails, returns error document with failure details
+3. Network failures are caught and logged appropriately
+4. Failed uploads are cleaned up when possible
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **OCR Not Working**: Check that `PDF_USE_OCR_FALLBACK=True` and required dependencies are installed
-2. **Poor OCR Results**: Adjust `PDF_OCR_MIN_TEXT_THRESHOLD` to fine-tune when OCR is triggered
-3. **Performance Issues**: Consider disabling OCR for documents that don't need it
+1. **Missing API Key**: Ensure `MISTRAL_API_KEY` environment variable is set
+2. **Network Issues**: Check internet connectivity to Mistral's API
+3. **API Limits**: Monitor API usage limits and quotas
+4. **Large Files**: Very large PDFs may exceed API limits
 
 ### Logs
 
 OCR processing is logged at INFO level:
-- OCR engine initialization
-- Fallback triggers
-- Processing success/failure
+- Client initialization
+- File upload status
+- OCR processing progress
+- Cleanup operations
 
 Example log entries:
 ```
-INFO - OCR engine initialized successfully
-INFO - PDF extraction returned minimal text (25 chars), attempting OCR fallback
-INFO - OCR extraction successful: 3 pages processed
+INFO - Mistral OCR client initialized successfully
+INFO - PDF uploaded successfully with ID: abc123
+INFO - OCR processing completed successfully
+INFO - OCR extraction successful: 1234 characters extracted
+INFO - Cleaned up uploaded file: abc123
 ```
 
-## Future Enhancements
+## Security Considerations
 
-Potential improvements for future versions:
-
-- Support for additional OCR engines
-- Batch OCR processing for multiple documents
-- OCR confidence scoring and filtering
-- Custom OCR model configuration
-- Image preprocessing for better OCR accuracy
+- **API Key Protection**: Keep your Mistral API key secure and never commit it to version control
+- **File Upload**: Files are temporarily uploaded to Mistral for processing
+- **Automatic Cleanup**: Files are automatically deleted after processing
+- **Secure URLs**: Signed URLs are used for secure file access
 
 ## Testing
 
 The OCR enhancement includes comprehensive tests:
 
-- Unit tests for OCR functionality (`tests/utils/test_ocr_pdf_loader.py`)
+- Unit tests for Mistral OCR functionality (`tests/utils/test_ocr_pdf_loader.py`)
 - Integration tests with the document loading pipeline
 - Configuration testing
 - Error handling verification
+- Mock testing for API interactions
 
 Run tests with:
 ```bash
 python -m pytest tests/utils/test_ocr_pdf_loader.py -v
 ```
+
+## API Rate Limits
+
+Be aware of Mistral API rate limits:
+- Monitor your API usage
+- Consider implementing retry logic for rate limit errors
+- Plan capacity based on expected PDF processing volume
+
+## Future Enhancements
+
+Potential improvements for future versions:
+
+- Batch processing for multiple PDFs
+- OCR confidence scoring and filtering
+- Custom OCR model configuration
+- Local caching of OCR results
+- Retry logic for transient failures
