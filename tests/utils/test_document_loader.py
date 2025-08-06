@@ -20,6 +20,7 @@ def test_get_loader_text(tmp_path):
     # Check that data is loaded.
     assert data is not None
 
+@patch('app.utils.document_loader.MISTRAL_API_KEY', 'test-api-key')
 def test_get_loader_pdf(tmp_path):
     # Create a temporary PDF file
     file_path = tmp_path / "test.pdf"
@@ -27,9 +28,9 @@ def test_get_loader_pdf(tmp_path):
     loader, known_type, file_ext = get_loader("test.pdf", "application/pdf", str(file_path))
     assert known_type is True
     assert file_ext == "pdf"
-    # Check that we get the OCREnabledPDFLoader
-    from app.utils.ocr_pdf_loader import OCREnabledPDFLoader
-    assert isinstance(loader, OCREnabledPDFLoader)
+    # Check that we get the MistralOCRPDFLoader
+    from app.utils.ocr_pdf_loader import MistralOCRPDFLoader
+    assert isinstance(loader, MistralOCRPDFLoader)
 
 def test_process_documents():
     docs = [

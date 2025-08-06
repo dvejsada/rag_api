@@ -72,11 +72,8 @@ CHUNK_OVERLAP = int(get_env_variable("CHUNK_OVERLAP", "100"))
 env_value = get_env_variable("PDF_EXTRACT_IMAGES", "False").lower()
 PDF_EXTRACT_IMAGES = True if env_value == "true" else False
 
-# OCR Configuration
-env_value = get_env_variable("PDF_USE_OCR_FALLBACK", "True").lower()
-PDF_USE_OCR_FALLBACK = True if env_value == "true" else False
-
-PDF_OCR_MIN_TEXT_THRESHOLD = int(get_env_variable("PDF_OCR_MIN_TEXT_THRESHOLD", "50"))
+# OCR Configuration - Mistral OCR API
+MISTRAL_API_KEY = get_env_variable("MISTRAL_API_KEY", "", required=False)
 
 if POSTGRES_USE_UNIX_SOCKET:
     connection_suffix = f"{urllib.parse.quote_plus(POSTGRES_USER)}:{urllib.parse.quote_plus(POSTGRES_PASSWORD)}@/{urllib.parse.quote_plus(POSTGRES_DB)}?host={urllib.parse.quote_plus(DB_HOST)}"
