@@ -1,4 +1,5 @@
 import os
+from unittest.mock import patch, MagicMock
 from app.utils.document_loader import get_loader, clean_text, process_documents
 from langchain_core.documents import Document
 
@@ -18,6 +19,17 @@ def test_get_loader_text(tmp_path):
     data = loader.load()
     # Check that data is loaded.
     assert data is not None
+
+def test_get_loader_pdf(tmp_path):
+    # Create a temporary PDF file
+    file_path = tmp_path / "test.pdf"
+    file_path.write_bytes(b"%PDF-1.4 fake pdf content")
+    loader, known_type, file_ext = get_loader("test.pdf", "application/pdf", str(file_path))
+    assert known_type is True
+    assert file_ext == "pdf"
+    # Check that we get the OCREnabledPDFLoader
+    from app.utils.ocr_pdf_loader import OCREnabledPDFLoader
+    assert isinstance(loader, OCREnabledPDFLoader)
 
 def test_process_documents():
     docs = [

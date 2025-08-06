@@ -6,7 +6,7 @@ from typing import List, Optional
 
 from langchain_core.documents import Document
 
-from app.config import known_source_ext, PDF_EXTRACT_IMAGES, CHUNK_OVERLAP, logger
+from app.config import known_source_ext, PDF_EXTRACT_IMAGES, PDF_USE_OCR_FALLBACK, PDF_OCR_MIN_TEXT_THRESHOLD, CHUNK_OVERLAP, logger
 from langchain_community.document_loaders import (
     TextLoader,
     PyPDFLoader,
@@ -19,6 +19,7 @@ from langchain_community.document_loaders import (
     UnstructuredExcelLoader,
     UnstructuredPowerPointLoader,
 )
+from app.utils.ocr_pdf_loader import OCREnabledPDFLoader
 
 
 def detect_file_encoding(filepath: str) -> str:
@@ -65,7 +66,12 @@ def get_loader(filename: str, file_content_type: str, filepath: str):
     known_type = True
 
     if file_ext == "pdf":
-        loader = PyPDFLoader(filepath, extract_images=PDF_EXTRACT_IMAGES)
+        loader = OCREnabledPDFLoader(
+            filepath, 
+            extract_images=PDF_EXTRACT_IMAGES,
+            use_ocr_fallback=PDF_USE_OCR_FALLBACK,
+            min_text_threshold=PDF_OCR_MIN_TEXT_THRESHOLD
+        )
     elif file_ext == "csv":
         # Detect encoding for CSV files
         encoding = detect_file_encoding(filepath)
