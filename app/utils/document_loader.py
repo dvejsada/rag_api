@@ -9,10 +9,9 @@ import chardet
 
 from langchain_core.documents import Document
 
-from app.config import known_source_ext, PDF_EXTRACT_IMAGES, CHUNK_OVERLAP, logger
+from app.config import known_source_ext, PDF_EXTRACT_IMAGES, CHUNK_OVERLAP, logger, MISTRAL_API_KEY, MISTRAL_OCR_MODEL
 from langchain_community.document_loaders import (
     TextLoader,
-    PyPDFLoader,
     CSVLoader,
     Docx2txtLoader,
     UnstructuredEPubLoader,
@@ -219,35 +218,89 @@ def process_documents(documents: List[Document]) -> str:
 
 class SafePyPDFLoader:
     """
-    A wrapper around PyPDFLoader that handles image extraction failures gracefully.
-    Falls back to text-only extraction when image extraction fails.
+    Replacement for previous PyPDF-based loader that now uses Mistral OCR API.
+    Keeps the class name for compatibility with existing imports/tests.
 
-    This is a workaround for issues with PyPDFLoader that can occur when extracting images
-    from PDFs, which can lead to KeyError exceptions if the PDF is malformed or has unsupported
-    image formats. This class attempts to load the PDF with image extraction enabled, and if it
-    fails due to a KeyError related to image filters, it falls back to loading the PDF
-    without image extraction.
-    ref.: https://github.com/langchain-ai/langchain/issues/26652
+    It returns one Document per page with metadata similar to PyPDFLoader:
+    - metadata.source: original filepath
+    - metadata.page: 1-based page index
+
+    Images are not extracted.
     """
 
     def __init__(self, filepath: str, extract_images: bool = False):
         self.filepath = filepath
-        self.extract_images = extract_images
+        # kept for backward compatibility (unused, images are not extracted)
+        self.extract_images = False
         self._temp_filepath = None  # For compatibility with cleanup function
 
+    def _encode_pdf_b64(self) -> str:
+        import base64
+
+        with open(self.filepath, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
+
     def load(self) -> List[Document]:
-        """Load PDF documents with automatic fallback on image extraction errors."""
-        loader = PyPDFLoader(self.filepath, extract_images=self.extract_images)
+        # Lazy import to avoid hard dependency at import time
+        try:
+            from mistralai import Mistral
+        except Exception as e:
+            raise RuntimeError(
+                "mistralai package is required for PDF OCR. Please install 'mistralai' and set MISTRAL_API_KEY."
+            ) from e
+
+        if not MISTRAL_API_KEY:
+            raise RuntimeError(
+                "MISTRAL_API_KEY is not set. Please configure it in environment variables."
+            )
+
+        base64_pdf = self._encode_pdf_b64()
+        client = Mistral(api_key=MISTRAL_API_KEY)
 
         try:
-            return loader.load()
-        except KeyError as e:
-            if "/Filter" in str(e) and self.extract_images:
-                logger.warning(
-                    f"PDF image extraction failed for {self.filepath}, falling back to text-only: {e}"
+            ocr_response = client.ocr.process(
+                model=MISTRAL_OCR_MODEL,
+                document={
+                    "type": "document_url",
+                    "document_url": f"data:application/pdf;base64,{base64_pdf}",
+                },
+                include_image_base64=False,
+            )
+        except Exception as e:
+            logger.error(f"Mistral OCR API call failed: {e}")
+            raise
+
+        pages = getattr(ocr_response, "pages", None)
+        # Some clients return dict-like response; handle both
+        if pages is None and isinstance(ocr_response, dict):
+            pages = ocr_response.get("pages")
+
+        if not pages:
+            # Return an empty single document to avoid downstream crashes
+            return [
+                Document(
+                    page_content="",
+                    metadata={"source": self.filepath, "page": 1},
                 )
-                fallback_loader = PyPDFLoader(self.filepath, extract_images=False)
-                return fallback_loader.load()
-            else:
-                # Re-raise if it's a different error
-                raise
+            ]
+
+        documents: List[Document] = []
+        for page in pages:
+            # Handle both object and dict access
+            index = getattr(page, "index", None) if not isinstance(page, dict) else page.get("index")
+            markdown = getattr(page, "markdown", None) if not isinstance(page, dict) else page.get("markdown")
+            if index is None:
+                # Default to 1-based index progression
+                index = len(documents) + 1
+            content = markdown or ""
+            documents.append(
+                Document(
+                    page_content=content,
+                    metadata={
+                        "source": self.filepath,
+                        "page": index,
+                    },
+                )
+            )
+
+        return documents
